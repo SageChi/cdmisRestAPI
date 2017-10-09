@@ -15,6 +15,7 @@ var Counselautochangestatus = require('../models/counselautochangestatus')
 var webEntry = require('../settings').webEntry
 var request = require('request')
 var commonFunc = require('../middlewares/commonFunc')
+var config = require('../config')
 
 // 获取医生ID对象，并添加自动转发标记 2017-07-15 GY
 // 注释 输入，doctorId；输出，相应的doctorObject
@@ -255,7 +256,7 @@ exports.counselAutoRelay = function (req, res, next) {
     Team.getOne(queryteam, function (err, teamitem) {
       if (err) {
         teamErrFlag = 1
-        console.log(err)
+        console.log(new Date(), 'teamErr', err)
       }
       teamitem = teamitem || null
       if (teamitem === null) {
@@ -312,6 +313,7 @@ exports.counselAutoRelay = function (req, res, next) {
         newConsultation.save(function (err, consultationInfo) {
           if (err) {
             consultationErrFlag = 1
+            console.log(new Date(), 'consultationErr', err)
           }
           // 生成咨询时，医生与患者页面的卡片消息模板
           let msgContent = {
@@ -356,6 +358,7 @@ exports.counselAutoRelay = function (req, res, next) {
           newCommunication.save(function (err, communicationInfo) {
             if (err) {
               communicationErrFlag = 1
+              console.log(new Date(), 'communicationErr', err)
             }
             let newsData = {
               messageId: communicationData.messageNo,
@@ -371,13 +374,14 @@ exports.counselAutoRelay = function (req, res, next) {
             }
             // 需要插入news表卧槽好多我先调已经存在的接口好了
             request({
-              url: 'http://' + webEntry.domain + '/api/v2/new/teamNews' + '?token=' + req.query.token || req.body.token,
+              url: 'http://' + webEntry.domain + '/api/v2/new/teamNewstemp',
               method: 'POST',
               body: newsData,
               json: true
             }, function (err, response) {
               if (err) {
                 newsErrFlag = 1
+                console.log(new Date(), 'newsErr', err)
               }
               if (index < teamIds.length - 1) {
                 relayOne(++index)
@@ -555,7 +559,7 @@ exports.getStatus = function (req, res, next) {
   }
 
   var opts = ''
-  var fields = {'_id': 0, 'messages': 0, 'revisionInfo': 0}
+  var fields = {'messages': 0, 'revisionInfo': 0}
   var populate = {path: 'patientId doctorId', select: {'_id': 0, 'userId': 1, 'name': 1}}
 
   Counsel.getSome(query, function (err, items) {
@@ -568,6 +572,7 @@ exports.getStatus = function (req, res, next) {
       var counsels = []
       counsels = items.sort(sortTime)
       req.body.counselId = counsels[0].counselId
+      req.body.conselObject = counsels[0]._id
       if (statusInBody === null && changeType === null) {
         return res.json({result: counsels[0]})
       } else {
@@ -579,7 +584,7 @@ exports.getStatus = function (req, res, next) {
 }
 
 // 注释 更改问诊类型 输入，type，changetype，counselId；输出，更新成功或失败
-exports.changeCounselType = function (req, res) {
+exports.changeCounselType = function (req, res, next) {
   // 若类型为1 更改类型标识为True 写入查询和更新参数 否则返回错误
   let query = {}
   let upObj = {}
@@ -591,6 +596,7 @@ exports.changeCounselType = function (req, res) {
     upObj = {
       type: 3
     }
+    req.body.newtype = 3
   } else if (req.body.type === 1 && req.body.changeType === 'type7') {
     // type7 咨询转加急咨询
     query = {
@@ -599,6 +605,7 @@ exports.changeCounselType = function (req, res) {
     upObj = {
       type: 7
     }
+    req.body.newtype = 7
   } else {
     return res.json({result: '不可更改的类型!'})
   }
@@ -611,7 +618,8 @@ exports.changeCounselType = function (req, res) {
     if (upCounsel == null) {
       return res.json({result: '修改失败，不存在的counselId！'})
     }
-    res.json({result: '修改成功', editResults: upCounsel})
+    // res.json({result: '修改成功', editResults: upCounsel})
+    next()
   }, {new: true})
 }
 
@@ -673,15 +681,15 @@ exports.counselAutoEndMsg = function () {
       for (let i = 0; i < 1; i++) {
         // let doctorOpenId = timeoutCounsels[i].doctorId.openId
         // let patientOpenId = timeoutCounsels[i].patientId.openId
-        var template = {
+        var templateDoc = {
           'userId': timeoutCounsels[i].doctorId.userId,
           'role': 'doctor',
           'postdata': {
-            'template_id': 'F5UpddU9v4m4zWX8_NA9t3PU_9Yraj2kUxU07CVIT-M',
-            'url': '',
+            'template_id': config.wxTemplateIdConfig.counselAutoEndDoc,
+            'url': '',                                      // 跳转路径需要添加
             'data': {
               'first': {
-                'value': '您好，有一位新患者添加您为他的主管医生。',
+                'value': '您好，患者咨询已结束。',
                 'color': '#173177'
               },
               'keyword1': {
@@ -689,12 +697,16 @@ exports.counselAutoEndMsg = function () {
                 'color': '#173177'
               },
               'keyword2': {
-                'value': commonFunc.getNowFormatSecond(),   // 添加的时间
+                'value': timeoutCounsels[i].help,           // 咨询内容
+                'color': '#173177'
+              },
+              'keyword3': {
+                'value': commonFunc.getNowFormatSecond(),   // 提交时间
                 'color': '#173177'
               },
 
               'remark': {
-                'value': '感谢您的使用！',
+                'value': '后期咨询请注意及时回复。',
                 'color': '#173177'
               }
             }
@@ -703,7 +715,7 @@ exports.counselAutoEndMsg = function () {
         // request({
         //   url: 'http://' + webEntry.domain + '/api/v2/wechat/messageTemplate' + '?token=' + req.query.token || req.body.token,
         //   method: 'POST',
-        //   body: template,
+        //   body: templateDoc,
         //   json: true
         // }, function (err, response) {
         //   if (!err && response.statusCode === 200) {
@@ -713,32 +725,28 @@ exports.counselAutoEndMsg = function () {
         //   }
         // })
 
-        var template2 = {
+        var templatePat = {
           'userId': timeoutCounsels[i].patientId.userId,
           'role': 'patient',
           'postdata': {
-            'template_id': '43kP7uwMZmr52j7Ptk8GLwBl5iImvmqmBbFNND_tDEg',
+            'template_id': config.wxTemplateIdConfig.counselAutoEndPat,
             'url': '',
             'data': {
               'first': {
-                'value': '您现在已经绑定' + timeoutCounsels[i].doctorId.name + '医生为您的主管医生。', // 医生姓名
+                'value': '您好，您的咨询已结束。',
                 'color': '#173177'
               },
               'keyword1': {
-                'value': timeoutCounsels[i].doctorId.name, // 医生姓名
+                'value': timeoutCounsels[i].help,           // 咨询内容
                 'color': '#173177'
               },
               'keyword2': {
-                'value': 'title',    // 医生职称
-                'color': '#173177'
-              },
-              'keyword3': {
-                'value': 'workUnit', // 所在医院
+                'value': '医生超时未回复',                   // 结束原因
                 'color': '#173177'
               },
 
               'remark': {
-                'value': '点击底栏【肾事管家】按钮进行注册，注册登录后可查看主管医生详情，并进行咨询问诊。',
+                'value': '我们会提醒医生在后期咨询中及时回复您的问题。',
                 'color': '#173177'
               }
             }
@@ -747,7 +755,7 @@ exports.counselAutoEndMsg = function () {
         // request({
         //   url: 'http://' + webEntry.domain + '/api/v2/wechat/messageTemplate' + '?token=' + req.query.token || req.body.token,
         //   method: 'POST',
-        //   body: template2,
+        //   body: templatePat,
         //   json: true
         // }, function (err, response) {
         //   if (!err && response.statusCode === 200) {

@@ -1,24 +1,28 @@
 var DoctorsInCharge = require('../models/doctorsInCharge')
 var Alluser = require('../models/alluser')
 var DpRelation = require('../models/dpRelation')
-var request = require('request')
-var webEntry = require('../settings').webEntry
+// var request = require('request')
+// var webEntry = require('../settings').webEntry
 var Order = require('../models/order')
+var async = require('async')
 
-var getToken = function (headers) {
-  if (headers && headers.authorization) {
-    var authorization = headers.authorization
-    var part = authorization.split(' ')
-    if (part.length === 2) {
-      var token = part[1]
-      return token
-    } else {
-      return null
-    }
-  } else {
-    return null
-  }
-}
+var alluserCtrl = require('../controllers_v2/alluser_controller')
+var wechatCtrl = require('../controllers_v2/wechat_controller')
+
+// var getToken = function (headers) {
+//   if (headers && headers.authorization) {
+//     var authorization = headers.authorization
+//     var part = authorization.split(' ')
+//     if (part.length === 2) {
+//       var token = part[1]
+//       return token
+//     } else {
+//       return null
+//     }
+//   } else {
+//     return null
+//   }
+// }
 
 /**
 医生端
@@ -165,74 +169,81 @@ exports.updateDoctorInCharge = function (req, res, next) {
     } else if (upDIC === null) {
       return res.json({results: '找不到该患者'})
     } else {
-      // return res.json({results: '审核完成'})
-      if (Number(upDIC.invalidFlag) === 1) { // 审核结果为通过，给医生账户充钱
-        req.body.docInChaObject = upDIC
-        next()
-      } else if (Number(upDIC.invalidFlag) === 3) { // 审核结果为拒绝，调用退款接口
-        // return res.json({msg: '测试中，待退款', code: 0})
-        let queryO = {docInChaObject: upDIC._id}
-        Order.getOne(queryO, function (err, itemO) { // 获取相应订单的订单号
-          if (err) {
-            return res.status(500).send(err)
-          } else if (itemO !== null) {
+      let queryO = {docInChaObject: upDIC._id}
+      Order.getOne(queryO, function (err, itemO) {
+        if (err) {
+          return res.status(500).send(err)
+        } else if (itemO !== null) {
+          if (Number(upDIC.invalidFlag) === 1) { // 审核结果为通过，给医生账户充钱
+            req.body.docInChaObject = upDIC
+            if ((upDIC.patientId || null) !== null) {
+              if ((upDIC.patientId.phoneNo || null) !== null) {
+                let params = {
+                  type: 'consent',
+                  phoneNo: upDIC.patientId.phoneNo,
+                  doctorName: upDIC.doctorId.name,
+                  start: new Date(upDIC.start).getFullYear() + '年' + (new Date(upDIC.start).getMonth() + 1) + '月' + new Date(upDIC.start).getDate() + '日',
+                  end: new Date(upDIC.end).getFullYear() + '年' + (new Date(upDIC.end).getMonth() + 1) + '月' + new Date(upDIC.end).getDate() + '日',
+                  orderNo: itemO.orderNo
+                }
+                alluserCtrl.servicesMessageAsync(params, function (err, results) {
+                  if (err) {
+                    console.log({msg: err, data: results, code: 1})
+                  }
+                })
+              }
+            }
+            return next()
+          } else if (Number(upDIC.invalidFlag) === 3) { // 审核结果为拒绝，调用退款接口
             let orderNo = itemO.orderNo
             let money = itemO.money || null
             if (Number(money) !== 0) {
-              request({ // 调用微信退款接口
-                url: 'http://' + webEntry.domain + '/api/v2/wechat/refund',
-                method: 'POST',
-                body: {'role': 'appPatient', 'orderNo': orderNo, 'token': (req.body && req.body.token) || getToken(req.headers) || (req.query && req.query.token)},
-                json: true
-              }, function (err, responseR) {
+              let params = {
+                orderNo: orderNo, // 退款单号
+                role: 'appPatient'
+              }
+              wechatCtrl.wechatRefundAsync(params, function (err, result) {
                 if (err) {
-                  return res.status(500).send(err)
-                } else if ((responseR.body.results || null) === null) {
-                  // return res.json({msg: '审核成功，已拒绝患者但退款失败，微信接口调用失败，请联系管理员', data: upDIC, code: 1})
-                  console.log('微信接口调用失败，用户"' + itemO.patientName + '"退款失败，订单号为"' + itemO.orderNo + '"')
-                } else if (responseR.body.results.xml.return_code === 'SUCCESS' && responseR.body.results.xml.return_msg === 'OK') {
-                  // return res.json({msg: '审核成功，已拒绝患者并退款', data: upDIC, code: 0})
-                  console.log('用户"' + itemO.patientName + '"退款成功')
+                  console.log(new Date() + ' --- 主管医生审核拒绝，短信发送 --- ERROR: ' + err)
                 } else {
-                  // return res.json({msg: '审核成功，已拒绝患者但退款失败，请联系管理员', data: upDIC, code: 1})
-                  console.log('用户"' + itemO.patientName + '"退款失败，订单号为"' + itemO.orderNo + '"')
+                  let refundResults = result.refund.xml || null
+                  if (refundResults !== null) {
+                    if (refundResults.return_code === 'SUCCESS' && refundResults.result_code === 'SUCCESS') {
+                      console.log(new Date() + ' --- 主管医生审核拒绝，短信发送 --- 用户"' + itemO.patientName + '"退款成功')
+                    } else {
+                      console.log(new Date() + ' --- 主管医生审核拒绝，短信发送 --- 用户"' + itemO.patientName + '"退款失败，订单号为"' + itemO.orderNo + '"')
+                    }
+                  } else {
+                    console.log(new Date() + ' --- 主管医生审核拒绝，短信发送 --- 微信接口调用失败，用户"' + itemO.patientName + '"退款失败，订单号为"' + itemO.orderNo + '"')
+                  }
                 }
                 if ((upDIC.patientId || null) !== null) {
                   if ((upDIC.patientId.phoneNo || null) !== null) {
-                    request({ // 调用短信发送接口
-                      url: 'http://' + webEntry.domain + '/api/v2/services/message',
-                      method: 'POST',
-                      body: {
-                        'phoneNo': upDIC.patientId.phoneNo,
-                        'doctorName': upDIC.doctorId.name,
-                        'reason': upDIC.rejectReason,
-                        'orderMoney': Number(money),
-                        'orderNo': orderNo,
-                        'token': (req.body && req.body.token) || getToken(req.headers) || (req.query && req.query.token),
-                        'rejectFlag': 1
-                      },
-                      json: true
-                    }, function (err, responseM) {
+                    let params = {
+                      type: 'reject',
+                      phoneNo: upDIC.patientId.phoneNo,
+                      doctorName: upDIC.doctorId.name,
+                      orderNo: itemO.orderNo, // 退款订单号
+                      orderMoney: itemO.money, // 退款金额订单
+                      reason: upDIC.rejectReason
+                    }
+                    alluserCtrl.servicesMessageAsync(params, function (err, results) {
                       if (err) {
-                        return res.status(500).send(err)
-                      } else if (Number(responseM.body.results) === 0) {
-                        console.log('用户"' + itemO.patientName + '"短信发送成功')
-                      } else {
-                        console.log('用户"' + itemO.patientName + '"短信发送失败')
+                        console.log({msg: err, data: results, code: 1})
                       }
+                      return res.json({msg: '审核成功，已拒绝患者', data: upDIC, code: 0})
                     })
                   }
                 }
-                return res.json({msg: '审核成功，已拒绝患者', data: upDIC, code: 0})
               })
             } else {
               return res.json({msg: '审核成功，已拒绝患者', data: upDIC, code: 0})
             }
-          } else {
-            return res.json({msg: '审核成功，已拒绝患者，退款失败，无法查询订单号', data: upDIC, code: 0})
           }
-        })
-      }
+        } else {
+          return res.json({msg: '数据错误，无法查询订单号', data: upDIC, code: 0})
+        }
+      })
     }
   }, {new: true}, populate)
 }
@@ -247,7 +258,7 @@ exports.addDoctorInCharge = function (req, res, next) {
   let doctorObjectId = req.body.doctorObject._id
   let patientObjectId = req.body.patientObject._id
   let chargeDuration = req.body.chargeDuration || null
-  if (chargeDuration == null) {
+  if (chargeDuration === null) {
     return res.json({result: '请填写chargeDuration!'})
   }
   let queryDIC = {doctorId: doctorObjectId, patientId: patientObjectId}
@@ -307,37 +318,24 @@ exports.addPatientInCharge = function (req, res, next) {
       }
     }
   }
-  DpRelation.update(query, upObj, function (err, upRelation1) {
+  DpRelation.updateOne(query, upObj, function (err, upRelation1) {
     if (err) {
       return res.status(422).send(err)
-    } else if (upRelation1.n === 0) {
-      let dpRelationData = {
-        doctorId: doctorObjectId
+    } else {
+      let params = {
+        type: 'request',
+        phoneNo: req.body.patientObject.phoneNo,
+        doctorName: req.body.doctorObject.name,
+        duration: req.body.chargeDuration + '个月' // 服务时长
       }
-      // return res.json({result:dpRelationData});
-      var newDpRelation = new DpRelation(dpRelationData)
-      newDpRelation.save(function (err, dpRelationInfo) {
+      alluserCtrl.servicesMessageAsync(params, function (err, results) {
         if (err) {
-          return res.status(500).send(err)
+          console.log({msg: err, data: results, code: 1})
         }
-        DpRelation.update(query, upObj, function (err, upRelation2) {
-          if (err) {
-            return res.status(422).send(err)
-          } else if (upRelation2.nModified === 0) {
-            return res.json({result: '未申请成功！请检查输入是否符合要求！'})
-          } else if (upRelation2.nModified === 1) {
-            // return res.json({result: '申请成功，请等待审核！', results: upRelation2})
-            next()
-          }
-        })
+        next()
       })
-    } else if (upRelation1.nModified === 0) {
-      return res.json({result: '未申请成功！请检查输入是否符合要求！'})
-    } else if (upRelation1.nModified === 1) {
-      // return res.json({result: '申请成功，请等待审核！', results: upRelation1})
-      next()
     }
-  }, {new: true})
+  }, {new: true, upsert: true})
 }
 
 // 2017-07-20 YQC
@@ -499,12 +497,12 @@ exports.relation = function (req, res) {
 /**
 过期取消主管关系
 */
-exports.autoRelease = function (req, res) {
-  console.log('主管服务过期自动取消 ' + new Date())
-  let today = new Date(new Date().toDateString())
+exports.autoRelease = function () {
+  console.log(new Date() + ' --- ' + new Date().toLocaleDateString() + '"主管服务过期自动取消"进程开始 ---')
+  let today = new Date(new Date().toLocaleDateString())
   let endOfToday = new Date(today)
-  endOfToday.setHours(today.getHours() + 23)
-  let query = {end: {$lte: endOfToday}, invalidFlag: 1}
+  endOfToday.setHours(today.getHours() + 24)
+  let query = {end: {$lt: endOfToday}, invalidFlag: 1}
   let upObj = {$set: {invalidFlag: 2}}
   let opts = ''
   let fields = {_id: 1, patientId: 1, doctorId: 1}
@@ -512,36 +510,51 @@ exports.autoRelease = function (req, res) {
     {path: 'patientId', select: {'_id': 1, 'name': 1}},
     {path: 'doctorId', select: {'_id': 1, 'name': 1}}
   ]
-  DoctorsInCharge.getSome(query, function (err, items) { // 获取需要自动核销的PD
-    if (err) {
-      console.log(err)
-    } else {
-      for (let item in items) {
-        let toRelease = items[item]
-        DoctorsInCharge.updateOne({_id: toRelease._id}, upObj, function (err, upDIC) {
-          if (err) {
-            console.log(err)
-          } else {
-            if ((toRelease.doctorId || null) !== null && (toRelease.patientId || null) !== null) {
-              let queryR = {doctorId: toRelease.doctorId._id, patientsInCharge: {$elemMatch: {$and: [{patientId: toRelease.patientId._id}, {invalidFlag: 1}]}}}
-              let upObjR = {
-                $set: {
-                  'patientsInCharge.$.invalidFlag': 2
-                }
-              }
-              DpRelation.updateOne(queryR, upObjR, function (err, upRelation) {
-                if (err) {
-                  console.log(err)
-                } else {
-                  console.log(toRelease.doctorId.name + '医生与' + toRelease.patientId.name + '患者主管服务到期取消成功')
-                }
-              })
-            } else {
-              console.log('This DIC entry ' + toRelease._id + ' has ERROR!')
+  let autoReleaseFun = function (item, callback) {
+    async.parallel({
+      updateDIC: function (callback) {
+        DoctorsInCharge.updateOne({_id: item._id}, upObj, function (err, upDIC) {
+          callback(err)
+        })
+      },
+      updateDPR: function (callback) {
+        if ((item.doctorId || null) !== null && (item.patientId || null) !== null) {
+          let queryR = {doctorId: item.doctorId._id, patientsInCharge: {$elemMatch: {$and: [{patientId: item.patientId._id}, {invalidFlag: 1}]}}}
+          let upObjR = {
+            $set: {
+              'patientsInCharge.$.invalidFlag': 2
             }
           }
-        })
+          DpRelation.updateOne(queryR, upObjR, function (err, upRelation) {
+            callback(err)
+          })
+        } else {
+          console.log(new Date() + ' --- 主管服务过期自动取消 --- ' + 'The DIC entry ' + item._id + ' has ERROR!')
+        }
       }
+    }, function (err) {
+      if (err) {
+        console.log(new Date() + ' --- 主管服务过期自动取消 --- ' + item.doctorId.name + '医生与' + item.patientId.name + '患者主管服务到期取消失败，原因为：\n' + err)
+      } else {
+        console.log(new Date() + ' --- 主管服务过期自动取消 --- ' + item.doctorId.name + '医生与' + item.patientId.name + '患者主管服务到期取消成功')
+      }
+      callback(err)
+    })
+  }
+
+  DoctorsInCharge.getSome(query, function (err, items) { // 获取需要自动核销的PD
+    if (err) {
+      console.log(new Date() + ' --- 主管服务过期自动取消 --- ' + err)
+    } else if (items.length > 0) {
+      async.each(items, autoReleaseFun, function (err) {
+        if (err) {
+          console.log(new Date() + ' --- ' + new Date().toLocaleDateString() + '"主管服务过期自动取消"进程结束，任务未全部完成，原因为：\n' + err)
+        } else {
+          console.log(new Date() + ' --- ' + new Date().toLocaleDateString() + '"主管服务过期自动取消"进程结束，任务全部完成 ---')
+        }
+      })
+    } else {
+      console.log(new Date() + ' --- ' + new Date().toLocaleDateString() + '无主管服务过期,"主管服务过期自动取消"进程结束 ---')
     }
   }, opts, fields, populate)
 }

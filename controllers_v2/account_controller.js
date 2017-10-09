@@ -3,6 +3,7 @@ var Account = require('../models/account')
 // var Patient = require('../models/patient')
 // var Doctor = require('../models/doctor')
 var Alluser = require('../models/alluser')
+var Counsel = require('../models/counsel')
 
 // 根据doctorId查询相关评价 2017-03-30 GY
 // 查询账户信息与消费及充值记录
@@ -46,8 +47,28 @@ exports.checkPatient = function (req, res, next) {
   // } else {
   //   req.patientId = req.query.patientId
   // }
+  if (req.session.role === 'patient') {
+    if (req.session.userId === null || req.session.userId === '' || req.session.userId === undefined) {
+      return res.json({result: '请填写patientId!'})
+    } else {
+      req.patientId = req.session.userId
+      req.role = req.session.role
+    }
+  } else if (req.session.role === 'doctor') {
+    // req.doctorId = req.session.userId
+    if (!req.query.patientId && !req.body.patientId) {
+        return res.status(412).json({result: '请填写patientId!'})
+    } else if (req.body.patientId) {
+      req.patientId = req.body.patientId
+    } else {
+      req.patientId = req.query.patientId
+    }
+  } else {
+    return res.status(412).send('token_role_not_available')
+  }
   // 判断患者ID是否存在
-  var query = {userId: req.patientId, role: req.role}
+  // var query = {userId: req.patientId, role: req.role}
+  let query = {userId: req.patientId, role: 'patient'}
   // Patient.getOne(query, function (err, item) {
   Alluser.getOne(query, function (err, item) {
     if (err) {
@@ -102,7 +123,12 @@ exports.checkDoctor = function (req, res, next) {
     } else {
     // req.doctorId = req.body.doctorId
     // 判断医生ID是否存在
-      req.doctorId = req.body.doctorId
+      if (req.session.role === 'doctor') {
+        req.doctorId = req.session.userId
+      } else {
+        req.doctorId = req.body.doctorId
+      }
+      // req.doctorId = req.body.doctorId
       var query = {userId: req.doctorId, role: 'doctor'}
       // Doctor.getOne(query, function (err, item) {
       Alluser.getOne(query, function (err, item) {
@@ -829,17 +855,33 @@ exports.getCountsRespective = function (req, res) {
       var count2 = 0 // 问诊
 
       // 2017-08-10 debug
-      if (item.times.constructor === Array && item.times.length) {
-        for (var i = item.times.length - 1; i >= 0; i--) {
-          // item.times[i]
-          if (item.times[i].count === 999) {
-            count2 += 1
-          } else if (item.times[i].count > 0 && item.times[i].count < 4) {
-            count1 += 1
+      // if (item.times.constructor === Array && item.times.length) {
+      //   for (var i = item.times.length - 1; i >= 0; i--) {
+      //     // item.times[i]
+      //     if (item.times[i].count === 999) {
+      //       count2 += 1
+      //     } else if (item.times[i].count > 0 && item.times[i].count < 4) {
+      //       count1 += 1
+      //     }
+      //   }
+      // }
+      // return res.json({result: {count1: count1, count2: count2}})
+
+      // 修改 从counsel表获取未完成咨询数 2017-09-29 lgf
+      query = {patientId: req.session._id, status: 1}
+      Counsel.getSome(query, function (err, counsels) {
+        if (err) {
+          return res.status(500).send(err.errmsg)
+        }
+        for (let i = 0; i < counsels.length; i++) {
+          if (counsels[i].type === 1 || counsels[i].type === 6 || counsels[i].type === 7) {
+            count1++
+          } else if (counsels[i].type === 2 || counsels[i].type === 3) {
+            count2++
           }
         }
-      }
-      return res.json({result: {count1: count1, count2: count2}})
+        return res.json({result: {count1: count1, count2: count2}})
+      })
     }
   })
 }

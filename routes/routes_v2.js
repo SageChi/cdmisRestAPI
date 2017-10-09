@@ -63,6 +63,7 @@ var departmentMonitorCtrl = require('../controllers_v2/departmentMonitor_control
 var policyCtrl = require('../controllers_v2/policy_controller')
 var districtMonitorCtrl = require('../controllers_v2/districtMonitor_controller')
 var departmentReportTempCtrl = require('../controllers_v2/departmentReportTemp_controller')
+// var testCtrl = require('../controllers_v2/convert_to_async')
 
 module.exports = function (app, webEntry, acl) {
   // app.get('/', function(req, res){
@@ -1530,7 +1531,7 @@ module.exports = function (app, webEntry, acl) {
   // app.post(version + '/report', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 1), reportCtrl.updateReport)
 
   // gy
-  // review
+  // review acl - admin
   app.post(version + '/review/reviewInfo', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 1), reviewCtrl.postReviewInfo(acl))
   app.get(version + '/review/certificate', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 1), reviewCtrl.getCertificate)
   app.get(version + '/review/reviewInfo', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 1), reviewCtrl.getReviewInfo)
@@ -2600,7 +2601,7 @@ module.exports = function (app, webEntry, acl) {
    *               type: object
    *               $ref: '#/definitions/Counsel'
    */
-  app.post(version + '/counsel/type', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), counselCtrl.getPatientObject, counselCtrl.getDoctorObject, counselCtrl.getStatus, counselCtrl.changeCounselType)
+  app.post(version + '/counsel/type', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), counselCtrl.getPatientObject, counselCtrl.getDoctorObject, counselCtrl.getStatus, counselCtrl.changeCounselType, orderCtrl.getchangeOrderNo, orderCtrl.updateOrder)
   // 评价医生
   /** YQC annotation 2017-08-10 - acl 2017-08-10 患者
    * @swagger
@@ -4825,6 +4826,7 @@ module.exports = function (app, webEntry, acl) {
    *         description: "Operation success."
    */
   app.post(version + '/patient/favoriteDoctor', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), patientCtrl.bindingFavoriteDoctor, patientCtrl.bindingFavoritePatient)
+  // app.post(version + '/patient/favoriteDoctor', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), patientCtrl.favoriteDoctorAsyncTest)
   // 患者端 取关医生 2017-07-21
   /** YQC annotation 2017-07-25 - acl 2017-07-25 患者
    * @swagger
@@ -5290,7 +5292,7 @@ module.exports = function (app, webEntry, acl) {
    *       412:
    *         description: "Please Check Input of diagId"
    */
-  app.post(version + '/services/cancelMyPD', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), personalDiagCtrl.cancelMyPD, personalDiagCtrl.updatePDCapacityUp)
+  app.post(version + '/services/cancelMyPD', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), personalDiagCtrl.cancelMyPD)
   // 患者端 我的面诊服务列表 还未添加分页显示
   /** YQC annotation 2017-07-28 - acl 2017-07-28 患者
    * @swagger
@@ -5456,15 +5458,16 @@ module.exports = function (app, webEntry, acl) {
    *         description: "Not Modified"
    */
   app.post(version + '/services/PDConfirmation', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), personalDiagCtrl.confirmPD, serviceCtrl.recharge)
-  // 获取需要人工处理退款的面诊列表
-  // app.get(version + '/services/manualRefundList', personalDiagCtrl.manualRefundList)
-  // 人工处理面诊退款
-  // app.post(version + '/services/manualRefund', personalDiagCtrl.manualRefund)
+  // 获取需要人工处理退款与／或通知的面诊列表 - acl 2017-09-21 admin
+  app.get(version + '/services/manualRefundList', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), personalDiagCtrl.manualRefundAndNoticeList)
+  // 人工处理面诊退款与通知 - acl 2017-09-21 admin
+  app.post(version + '/services/manualRefund', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), personalDiagCtrl.manualRefundAndNotice)
   // 服务相关短信测试
   app.post(version + '/services/message', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), alluserCtrl.serviceMessage)
+  // app.post(version + '/services/message', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), alluserCtrl.servicesMessageAsyncTest)
 
   // PC端保险管理
-  // 获取患者 权限insuranceC/insuranceA
+  // 获取患者 权限insuranceC/insuranceA/admin
   /** YQC annotation 2017-08-10
    * @swagger
    * /policy/patients:
@@ -5535,7 +5538,7 @@ module.exports = function (app, webEntry, acl) {
    *               type: number
    */
   app.get(version + '/policy/patients', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), policyCtrl.getSessionObject, policyCtrl.getPatients)
-  // 获取患者跟踪记录详情 权限insuranceC/insuranceA
+  // 获取患者跟踪记录详情 权限insuranceC/insuranceA/admin
   /** YQC annotation 2017-08-10
    * @swagger
    * /policy/history:
@@ -5584,7 +5587,7 @@ module.exports = function (app, webEntry, acl) {
    *               type: number
    */
   app.get(version + '/policy/history', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), policyCtrl.getSessionObject, policyCtrl.getPatientObject, policyCtrl.getHistory)
-  // 获取专员 权限insuranceC
+  // 获取专员 权限insuranceC/admin
   /** YQC annotation 2017-08-10
    * @swagger
    * /policy/agents:
@@ -5739,7 +5742,7 @@ module.exports = function (app, webEntry, acl) {
    *         description: "Operation success."
    */
   app.post(version + '/policy/policy', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), policyCtrl.getSessionObject, policyCtrl.getPatientObject, policyCtrl.insertPolicy)
-  // 获取患者保单详情 权限insuranceC/insuranceA
+  // 获取患者保单详情 权限insuranceC/insuranceA/admin
   /** YQC annotation 2017-08-23
    * @swagger
    * /policy/policy:
@@ -6047,7 +6050,7 @@ module.exports = function (app, webEntry, acl) {
    *       500:
    *         description: Server internal error
    */
-  // 查询咨询免费次数，或者咨询某个医生的次数 权限 患者
+  // 查询咨询免费次数，或者咨询某个医生的次数 权限 患者/医生
   app.get(version + '/account/counts', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), accountCtrl.checkPatient, accountCtrl.checkDoctor, accountCtrl.getCounts)
   /**
    * @swagger
@@ -7075,6 +7078,8 @@ module.exports = function (app, webEntry, acl) {
    */
   // 获取消息 权限 医生/患者
   app.get(version + '/new/news', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), newsCtrl.getNews)
+  // 获取所有type的未读消息和历史记录情况 权限 患者/医生
+  app.get(version + '/new/allNotReadNews', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), newsCtrl.getAllNotReadNews)
   /**
    * @swagger
    * /new/newsByReadOrNot:
@@ -7438,6 +7443,7 @@ module.exports = function (app, webEntry, acl) {
    */
   // 护士端微信扫码绑定患者 权限 护士
   app.post(version + '/nurse/bindingPatient', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), alluserCtrl.getPatientObject, nurseInsuranceWorkCtrl.bindingPatient)
+  // app.post(version + '/nurse/bindingPatient', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), nurseInsuranceWorkCtrl.bindingPatientAsyncTest)
   // app.post(version + '/nurse/bindingPatient', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), nurseInsuranceWorkCtrl.checkBinding, alluserCtrl.getPatientObject, nurseInsuranceWorkCtrl.bindingPatient, nurseInsuranceWorkCtrl.deleteOpenIdTmp)
   /**
    * @swagger
@@ -7953,6 +7959,7 @@ module.exports = function (app, webEntry, acl) {
   // app.post(version + '/wechat/refund', orderCtrl.checkPayStatus('refund'), getNoMid.getNo(9), orderCtrl.refundChangeStatus('refundApplication'), wechatCtrl.chooseAppId, wechatCtrl.refund)
   // 退款接口
   app.post(version + '/wechat/refund', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), orderCtrl.checkPayStatus('refund'), getNoMid.getNo(9), orderCtrl.refundChangeStatus('refundApplication'), wechatCtrl.chooseAppId, wechatCtrl.refund, wechatCtrl.refundMessage)
+  // app.post(version + '/wechat/refund', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), wechatCtrl.wechatRefundAsyncTest)
   // 退款查询
   app.post(version + '/wechat/refundquery', tokenManager.verifyToken(), errorHandler.error, aclChecking.Checking(acl, 2), orderCtrl.checkPayStatus('refundquery'), wechatCtrl.chooseAppId, wechatCtrl.refundquery, orderCtrl.refundChangeStatus())
   // 消息模板
@@ -9247,7 +9254,6 @@ module.exports = function (app, webEntry, acl) {
   app.post(version + '/forump/deletepost', tokenManager.verifyToken(), errorHandler.error, forumpCtrl.deletePost)
   app.post(version + '/forump/deletecomment', tokenManager.verifyToken(), errorHandler.error, forumpCtrl.deleteComment)
   app.post(version + '/forump/deletefavorite', tokenManager.verifyToken(), errorHandler.error, forumpCtrl.deleteFavorite)
-
 
   // 科主任报告
   /** JYF 2017-08-16

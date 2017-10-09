@@ -1,6 +1,8 @@
 // var config = require('../config')
 var Team = require('../models/team')
 var News = require('../models/news')
+var Message = require('../models/message')
+var async = require('async')
 
 // 根据类型查询消息链接 2017-04-05 GY
 exports.getNews = function (req, res) {
@@ -56,7 +58,6 @@ exports.getNewsByReadOrNot = function (req, res) {
   // var type = Number(req.query.type)
   let type = req.query.type
   var _readOrNot = Number(req.query.readOrNot)
-
   var query = {}
 
   if (type !== null && type !== '' && type !== undefined) {
@@ -68,12 +69,9 @@ exports.getNewsByReadOrNot = function (req, res) {
     }
   }
   query['userId'] = userId
-  // query['readOrNot'] = _readOrNot
-  // if (userRole !== '' && userRole !== undefined) {
-  query['userRole'] = userRole
-  // }
   query['readOrNot'] = _readOrNot
-    // 注意'_id'的生成算法包含时间，因此直接用'_id'进行降序排列
+  query['userRole'] = userRole
+  // 注意'_id'的生成算法包含时间，因此直接用'_id'进行降序排列
   var opts = {'sort': '-time'}
   // console.log(query)
   News.getSome(query, function (err, items) {
@@ -85,9 +83,244 @@ exports.getNewsByReadOrNot = function (req, res) {
   }, opts)
 }
 
+// 获取患者端所有type的未读消息和历史记录情况 2017-09-28 lgf
+exports.getAllNotReadNews = function (req, res) {
+  let userId = req.session.userId
+  let userRole = req.session.role
+  let opts = {'sort': '-time'}
+  // console.log(query)
+
+  async.parallel({
+    type1: function (callback) {
+      let query1 = {userId: userId, userRole: userRole, readOrNot: 0}
+      query1['type'] = 1
+      // console.log('query1', query1)
+      News.getSome(query1, function (err, items) {
+        if (err) {
+          return callback(err)
+        }
+        let readOrNot = 1
+        let history = 0   // 1为有历史记录,0为无
+        if (items.length === 0) { // 无未读news,则判断是否有历史消息
+          delete query1.readOrNot
+          delete query1.userRole
+          query1['$or'] = [{readOrNot: 0}, {readOrNot: 1}]
+          Message.getSome(query1, function (err, messages) {
+            // console.log('query1', query1)
+            if (err) {
+              return callback(err)
+            } else if (messages.length !== 0) {
+              history = 1
+            }
+            let results = {type: 1, readOrNot, history, items: []}
+            return callback(err, results)
+            // res.json({results: {readOrNot, history, items: []}})
+          })
+        } else { // 有未读news
+          // console.log('items', items)
+          // res.json({results: items})
+          readOrNot = 0
+          history = 1
+          let results = {type: 1, readOrNot, history, items}
+          return callback(err, results)
+          // return res.json({results: {readOrNot, history, items}})
+        }
+      }, opts)
+    },
+    type3: function (callback) {
+      let query3 = {userId: userId, userRole: userRole, readOrNot: 0}
+      query3['type'] = 3
+      // console.log('query3', query3)
+      News.getSome(query3, function (err, items) {
+        if (err) {
+          return callback(err)
+        }
+        let readOrNot = 1
+        let history = 0   // 1为有历史记录,0为无
+        if (items.length === 0) { // 无未读news,则判断是否有历史消息
+          delete query3.readOrNot
+          delete query3.userRole
+          query3['$or'] = [{readOrNot: 0}, {readOrNot: 1}]
+          Message.getSome(query3, function (err, messages) {
+            // console.log('query3', query3)
+            if (err) {
+              return callback(err)
+            } else if (messages.length !== 0) {
+              history = 1
+            }
+            let results = {type: 3, readOrNot, history, items: []}
+            return callback(err, results)
+            // res.json({results: {readOrNot, history, items: []}})
+          })
+        } else { // 有未读news
+          // console.log('items', items)
+          // res.json({results: items})
+          readOrNot = 0
+          history = 1
+          let results = {type: 3, readOrNot, history, items}
+          return callback(err, results)
+          // return res.json({results: {readOrNot, history, items}})
+        }
+      }, opts)
+    },
+    type5: function (callback) {
+      let query5 = {userId: userId, userRole: userRole, readOrNot: 0}
+      query5['type'] = 5
+      // console.log('query5', query5)
+      News.getSome(query5, function (err, items) {
+        if (err) {
+          return callback(err)
+        }
+        let readOrNot = 1
+        let history = 0   // 1为有历史记录,0为无
+        if (items.length === 0) { // 无未读news,则判断是否有历史消息
+          delete query5.readOrNot
+          delete query5.userRole
+          query5['$or'] = [{readOrNot: 0}, {readOrNot: 1}]
+          Message.getSome(query5, function (err, messages) {
+            // console.log('query5', query5)
+            if (err) {
+              return callback(err)
+            } else if (messages.length !== 0) {
+              history = 1
+            }
+            let results = {type: 5, readOrNot, history, items: []}
+            return callback(err, results)
+            // res.json({results: {readOrNot, history, items: []}})
+          })
+        } else { // 有未读news
+          // console.log('items', items)
+          // res.json({results: items})
+          readOrNot = 0
+          history = 1
+          let results = {type: 5, readOrNot, history, items}
+          return callback(err, results)
+          // return res.json({results: {readOrNot, history, items}})
+        }
+      }, opts)
+    },
+    type6: function (callback) {
+      let query6 = {userId: userId, userRole: userRole, readOrNot: 0}
+      query6['type'] = 6
+      // console.log('query6', query6)
+      News.getSome(query6, function (err, items) {
+        if (err) {
+          return callback(err)
+        }
+        let readOrNot = 1
+        let history = 0   // 1为有历史记录,0为无
+        if (items.length === 0) { // 无未读news,则判断是否有历史消息
+          delete query6.readOrNot
+          delete query6.userRole
+          query6['$or'] = [{readOrNot: 0}, {readOrNot: 1}]
+          Message.getSome(query6, function (err, messages) {
+            // console.log('query6', query6)
+            if (err) {
+              return callback(err)
+            } else if (messages.length !== 0) {
+              history = 1
+            }
+            let results = {type: 6, readOrNot, history, items: []}
+            return callback(err, results)
+            // res.json({results: {readOrNot, history, items: []}})
+          })
+        } else { // 有未读news
+          // console.log('items', items)
+          // res.json({results: items})
+          readOrNot = 0
+          history = 1
+          let results = {type: 6, readOrNot, history, items}
+          return callback(err, results)
+          // return res.json({results: {readOrNot, history, items}})
+        }
+      }, opts)
+    },
+    type7: function (callback) {
+      let query7 = {userId: userId, userRole: userRole, readOrNot: 0}
+      query7['type'] = 7
+      // console.log('query7', query7)
+      News.getSome(query7, function (err, items) {
+        if (err) {
+          return callback(err)
+        }
+        let readOrNot = 1
+        let history = 0   // 1为有历史记录,0为无
+        if (items.length === 0) { // 无未读news,则判断是否有历史消息
+          delete query7.readOrNot
+          delete query7.userRole
+          query7['$or'] = [{readOrNot: 0}, {readOrNot: 1}]
+          Message.getSome(query7, function (err, messages) {
+            // console.log('query7', query7)
+            if (err) {
+              return callback(err)
+            } else if (messages.length !== 0) {
+              history = 1
+            }
+            let results = {type: 7, readOrNot, history, items: []}
+            return callback(err, results)
+            // res.json({results: {readOrNot, history, items: []}})
+          })
+        } else { // 有未读news
+          // console.log('items', items)
+          // res.json({results: items})
+          readOrNot = 0
+          history = 1
+          let results = {type: 7, readOrNot, history, items}
+          return callback(err, results)
+          // return res.json({results: {readOrNot, history, items}})
+        }
+      }, opts)
+    },
+    type8: function (callback) {
+      let query8 = {userId: userId, userRole: userRole, readOrNot: 0}
+      query8['type'] = 8
+      // console.log('query8', query8)
+      News.getSome(query8, function (err, items) {
+        if (err) {
+          return callback(err)
+        }
+        let readOrNot = 1
+        let history = 0   // 1为有历史记录,0为无
+        if (items.length === 0) { // 无未读news,则判断是否有历史消息
+          delete query8.readOrNot
+          delete query8.userRole
+          query8['$or'] = [{readOrNot: 0}, {readOrNot: 1}]
+          Message.getSome(query8, function (err, messages) {
+            // console.log('query8', query8)
+            if (err) {
+              return callback(err)
+            } else if (messages.length !== 0) {
+              history = 1
+            }
+            let results = {type: 8, readOrNot, history, items: []}
+            return callback(err, results)
+            // res.json({results: {readOrNot, history, items: []}})
+          })
+        } else { // 有未读news
+          // console.log('items', items)
+          // res.json({results: items})
+          readOrNot = 0
+          history = 1
+          let results = {type: 8, readOrNot, history, items}
+          return callback(err, results)
+          // return res.json({results: {readOrNot, history, items}})
+        }
+      }, opts)
+    }
+  }, function (err, results) {
+    if (err) {
+      return res.status(500).send(err.errmsg)
+    } else {
+      // let allNews = {type1: results.type1, type3: results.type3, type5: results.type5, type6: results.type6, type7: results.type7, type8: results.type8}
+      return res.json({results: [results.type1, results.type3, results.type5, results.type6, results.type7, results.type8]})
+    }
+  })
+}
+
 // 修改某种类型消息的已读和未读状态
 exports.changeNewsStatus = function (req, res) {
   let type = req.body.type || null
+  let sendBy = req.body.sendBy || null
   let query = {
     userId: req.session.userId,
     userRole: req.session.role
@@ -107,9 +340,48 @@ exports.changeNewsStatus = function (req, res) {
       query['type'] = type
     }
   }
+  if (sendBy !== null) { // 在群聊时，填写团队名或者病历号
+    query['sendBy'] = sendBy
+  }
 
-  var upObj = {
-    readOrNot: 1  // 置为已读
+  // var upObj = {
+  //   readOrNot: 1  // 置为已读
+  // }
+  // edit by GY@2017-09-23 --type of 14 new need
+  let upObj = {}
+  if (type === 14) {
+    query['readOrNot'] = 0 //查找未读
+    Message.getSome(query, function(err, messages) {
+      if (err) {
+        res.status(500).send(err)
+      } else if (messages.length === 0) {
+        upObj['readOrNot'] = 1
+        var opts = {
+          'multi': true, 'new': true
+        }
+      
+        News.update(query, upObj, function (err, upmessage) {
+          if (err) {
+            return res.status(422).send(err.message)
+          }
+      
+          if (upmessage.n !== 0 && upmessage.nModified === 0) {
+            return res.json({result: '未修改！请检查修改目标是否与原来一致！', results: upmessage})
+          }
+          if (upmessage.n !== 0 && upmessage.nModified !== 0) {
+            if (upmessage.n === upmessage.nModified) {
+              return res.json({result: '全部更新成功', results: upmessage})
+            }
+            return res.json({result: '未全部更新！', results: upmessage})
+          }
+        }, opts)
+      } else {
+        console.log('changeNewsStatus_failed:_type14_not_all_read')
+        return res.status(200).json({result:'全部更新成功', results:'changeNewsStatus_failed:_type14_not_all_read'})
+      }
+    })
+  } else {
+    upObj['readOrNot'] = 1
   }
 
   var opts = {
@@ -167,7 +439,8 @@ function insertOneNews (userId, sendBy, req, res) {
   if (req.body.type !== null && req.body.type !== '' && req.body.type !== undefined) {
     newData['type'] = req.body.type
     if (Number(req.body.type) === 15) {
-      newData['caseType'] = req.body.caseType
+      let caseType = req.body.caseType || 0
+      newData['caseType'] = Number(caseType)
     }
     query1['type'] = req.body.type
     query2['type'] = req.body.type
@@ -368,7 +641,7 @@ exports.insertTeamNews = function (req, res) {
   req.body.readOrNot = 1
   insertOneNews(userId, sendBy, req, res) // 用户发送消息记录
   req.body.readOrNot = 0
-  var TeamId = userId
+  var TeamId = req.body.teamId || userId
   var query = {
     teamId: TeamId
   }

@@ -130,6 +130,31 @@ exports.getOrderNo = function (req, res, next) {
   })
 }
 
+exports.getchangeOrderNo = function (req, res, next) {
+  var doctorId = req.body.doctorId || null
+  var patientId = req.body.patientId || null
+  var paystatus = Number(2)
+  var type = req.body.newtype || null
+  if (type !== null) {
+    type = Number(type)
+  }
+  // var _orderNo = req.query.orderNo || null
+  if (doctorId === null || patientId === null) {
+    return res.json({result: 1, msg: '请输入doctorId、patientId'})
+  }
+  var query = {userId: patientId, doctorId: doctorId, paystatus: paystatus, type: type}
+  Order.getOne(query, function (err, item) {
+    if (err) {
+      return res.status(500).send(err.errmsg)
+    } else if (item === null) {
+      return res.status(404).json({result: '更新订单错误：无法查询到订单请重新尝试或联系管理员'})
+    } else {
+      req.body.orderNo = item.orderNo
+      next()
+    }
+  })
+}
+
 exports.insertOrder = function (req, res, next) {
   // var money = req.body.money || null
   var money = req.body.money
@@ -275,40 +300,44 @@ exports.updateOrder = function (req, res) {
     if (err) {
       return res.status(500).send(err)
     }
-    if (paystatus === 2 && conselObject !== null) {
+    // console.log(item.paystatus)
+    // console.log(conselObject)
+    if (item.paystatus === 2 && conselObject !== null) {
       var query1 = {
         userId: item.doctorId
       }
       Account.getOne(query1, function (err, item1) {
         if (err) {
-          return res.status(500).send(err.errmsg)
+          return res.status(500).send(err)
         }
         if (item1 === null) {
           var accountData = {
             userId: item.doctorId,
-            money: item.money
+            money: item.money / 100
           }
           var newAccount = new Account(accountData)
           newAccount.save(function (err, accountInfo) {
             if (err) {
-              return res.status(500).send(err.errmsg)
+              return res.status(500).send(err)
             } else {
               res.json({result: 'success!'})
             }
           })
         } else {
-          var _money1 = item.money + item1.money
           var upObj = {
-            $set: {money: _money1 / 100}
+            $inc: {
+              money: item.money / 100
+              // money: item.money
+            }
           }
           Account.update(query1, upObj, function (err, upaccount) {
             if (err) {
-              return res.status(500).send(err.errmsg)
+              return res.status(500).send(err)
             }
             if (upaccount.nModified === 0) {
-              return res.json({result: '请获取账户信息确认是否修改成功'})
+              return res.json({result: '请获取账户信息确认是否修改成功', results: req.body.counselInfo})
             } else if (upaccount.nModified !== 0) {
-              return res.json({result: '修改成功', updateResult: upaccount})
+              return res.json({result: '修改成功', updateResult: upaccount, results: req.body.counselInfo})
             }
           })
         }
