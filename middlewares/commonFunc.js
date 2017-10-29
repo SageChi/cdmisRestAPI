@@ -2,6 +2,7 @@ var qs = require('querystring')
 var crypto = require('crypto')
 
 var ZEROS = '0000000000000'
+var webEntry = require('../settings').webEntry
 
 var commonFunc = {
   getClientIp: function (req) {
@@ -45,7 +46,7 @@ var commonFunc = {
     if (strDate >= 0 && strDate <= 9) {
       strDate = '0' + strDate
     }
-    var currentdate = date.getFullYear() + month + strDate
+    var currentdate = date.getFullYear() + String(month) + strDate
     return currentdate
   // YYYYMMDD
   },
@@ -59,7 +60,7 @@ var commonFunc = {
     if (strDate >= 0 && strDate <= 9) {
       strDate = '0' + strDate
     }
-    var formatDate = date.getFullYear() + month + strDate
+    var formatDate = date.getFullYear() + String(month) + strDate
     return formatDate
   // YYYYMMDD
   },
@@ -216,6 +217,74 @@ var commonFunc = {
   },
   createNonceStr: function () {
     return Math.random().toString(36).substr(2, 15)
+  },
+  removePrefix: function (photoUrl) {
+    if ((photoUrl || null) !== null && Object.prototype.toString.call(photoUrl) === '[object String]') {
+      if (photoUrl.indexOf('/uploads/photos') !== -1) {
+        photoUrl = photoUrl.split('/')
+        photoUrl = '/' + photoUrl.slice(photoUrl.indexOf('uploads')).join('/')
+      }
+    }
+    return photoUrl || null
+  },
+  removePrefixs: function (photoUrls) {
+    let adapter = []
+    if (Object.prototype.toString.call(photoUrls) === '[object Array]') {
+      for (let photo = 0; photo < photoUrls.length; photo++) {
+        let photoUrl = commonFunc.removePrefix(photoUrls[photo])
+        if (photoUrl !== null) {
+          adapter.push(photoUrl)
+        }
+      }
+      return adapter
+    } else {
+      return photoUrls
+    }
+  },
+  adaptPrefix: function (photoUrl) {
+    if ((photoUrl || null) !== null && Object.prototype.toString.call(photoUrl) === '[object String]') {
+      if (photoUrl.indexOf('/uploads/photos') !== -1) {
+        photoUrl = photoUrl.split('/')
+        photoUrl = 'https://' + webEntry.photo_domain + '/' + photoUrl.slice(photoUrl.indexOf('uploads')).join('/')
+      }
+    }
+    return photoUrl || null
+  },
+  adaptPrefixs: function (photoUrls) {
+    let adapter = []
+    if (Object.prototype.toString.call(photoUrls) === '[object Array]') {
+      for (let photo = 0; photo < photoUrls.length; photo++) {
+        let photoUrl = commonFunc.adaptPrefix(photoUrls[photo])
+        if (photoUrl !== null) {
+          adapter.push(photoUrl)
+        }
+      }
+      return adapter
+    } else {
+      return photoUrls
+    }
+  },
+  addPrefix: function (photoUrl) {
+    if ((photoUrl || null) !== null && Object.prototype.toString.call(photoUrl) === '[object String]') {
+      if (photoUrl.indexOf('/uploads/photos') === 0) {
+        photoUrl = 'https://' + webEntry.photo_domain + '/' + photoUrl
+      }
+    }
+    return photoUrl || null
+  },
+  addPrefixs: function (photoUrls) {
+    let adapter = []
+    if (Object.prototype.toString.call(photoUrls) === '[object Array]') {
+      for (let photo = 0; photo < photoUrls.length; photo++) {
+        let photoUrl = commonFunc.addPrefix(photoUrls[photo])
+        if (photoUrl !== null) {
+          adapter.push(photoUrl)
+        }
+      }
+      return adapter
+    } else {
+      return photoUrls
+    }
   }
 }
 

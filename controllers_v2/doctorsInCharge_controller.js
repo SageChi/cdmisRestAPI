@@ -5,7 +5,7 @@ var DpRelation = require('../models/dpRelation')
 // var webEntry = require('../settings').webEntry
 var Order = require('../models/order')
 var async = require('async')
-
+var commonFunc = require('../middlewares/commonFunc')
 var alluserCtrl = require('../controllers_v2/alluser_controller')
 var wechatCtrl = require('../controllers_v2/wechat_controller')
 
@@ -61,6 +61,9 @@ exports.getPatientsToReview = function (req, res) {
         if (patientsList.length === 0) {
           return res.json({results: '无主管医生服务待审核的患者！', numberToReview: patientsList.length})
         } else {
+          for (var i = patientsList.length - 1; i >= 0; i--) {
+            patientsList[i].photoUrl = commonFunc.adaptPrefix(patientsList[i].photoUrl)
+          }
           res.json({results: patientsList, numberToReview: patientsList.length})
         }
       }
@@ -175,25 +178,34 @@ exports.updateDoctorInCharge = function (req, res, next) {
           return res.status(500).send(err)
         } else if (itemO !== null) {
           if (Number(upDIC.invalidFlag) === 1) { // 审核结果为通过，给医生账户充钱
-            req.body.docInChaObject = upDIC
-            if ((upDIC.patientId || null) !== null) {
-              if ((upDIC.patientId.phoneNo || null) !== null) {
-                let params = {
-                  type: 'consent',
-                  phoneNo: upDIC.patientId.phoneNo,
-                  doctorName: upDIC.doctorId.name,
-                  start: new Date(upDIC.start).getFullYear() + '年' + (new Date(upDIC.start).getMonth() + 1) + '月' + new Date(upDIC.start).getDate() + '日',
-                  end: new Date(upDIC.end).getFullYear() + '年' + (new Date(upDIC.end).getMonth() + 1) + '月' + new Date(upDIC.end).getDate() + '日',
-                  orderNo: itemO.orderNo
-                }
-                alluserCtrl.servicesMessageAsync(params, function (err, results) {
-                  if (err) {
-                    console.log({msg: err, data: results, code: 1})
+            // 更新alluser DIC字段
+            let queryP = {_id: patientObjectId}
+            let upObjP = {$set: {doctorInCharge: req.body.doctorObject._id}}
+            Alluser.updateOne(queryP, upObjP, function (err, upP) {
+              if (err) {
+                return res.status(500).send(err)
+              } else {
+                req.body.docInChaObject = upDIC
+                if ((upDIC.patientId || null) !== null) {
+                  if ((upDIC.patientId.phoneNo || null) !== null) {
+                    let params = {
+                      type: 'consent',
+                      phoneNo: upDIC.patientId.phoneNo,
+                      doctorName: upDIC.doctorId.name,
+                      start: new Date(upDIC.start).getFullYear() + '年' + (new Date(upDIC.start).getMonth() + 1) + '月' + new Date(upDIC.start).getDate() + '日',
+                      end: new Date(upDIC.end).getFullYear() + '年' + (new Date(upDIC.end).getMonth() + 1) + '月' + new Date(upDIC.end).getDate() + '日',
+                      orderNo: itemO.orderNo
+                    }
+                    alluserCtrl.servicesMessageAsync(params, function (err, results) {
+                      if (err) {
+                        console.log({msg: err, data: results, code: 1})
+                      }
+                    })
                   }
-                })
+                }
+                return next()
               }
-            }
-            return next()
+            })
           } else if (Number(upDIC.invalidFlag) === 3) { // 审核结果为拒绝，调用退款接口
             let orderNo = itemO.orderNo
             let money = itemO.money || null
@@ -388,9 +400,11 @@ exports.getDoctorsInCharge = function (req, res, next) {
             req.body.type = 2
             req.body.title = '警戒值提醒'
             req.body.description = req.body.patientObject.name + '患者的' + req.itemType + '项目不达标,测量值为' + req.measureData + ',该项正常值为' + req.recommend
+            req.body.url = req.session.userId
             // console.log('req.body.description', req.body.description)
             return next()
           } else {
+            itemsDIC[i].doctorId.photoUrl = commonFunc.adaptPrefix(itemsDIC[i].doctorId.photoUrl)
             return res.json({message: '当前已有主管医生!', results: itemsDIC[i]})
           }
         }
@@ -404,8 +418,8 @@ exports.getDoctorsInCharge = function (req, res, next) {
 // 删除主管医生
 exports.deleteDoctorInCharge = function (req, res, next) {
   let patientObjectId = req.body.patientObject._id
-  let queryP = {patientId: patientObjectId, invalidFlag: 1}
-  DoctorsInCharge.getOne(queryP, function (err, itemDIC) {
+  let query = {patientId: patientObjectId, invalidFlag: 1}
+  DoctorsInCharge.getOne(query, function (err, itemDIC) {
     if (err) {
       return res.status(500).send(err)
     } else if (itemDIC === null) {
@@ -416,7 +430,7 @@ exports.deleteDoctorInCharge = function (req, res, next) {
           invalidFlag: 2
         }
       }
-      DoctorsInCharge.update(queryP, upObj, function (err, upDIC) {
+      DoctorsInCharge.update(query, upObj, function (err, upDIC) {
         if (err) {
           return res.status(500).send(err)
         }
@@ -424,8 +438,17 @@ exports.deleteDoctorInCharge = function (req, res, next) {
           return res.status(400).json({results: '解绑医生不成功'})
         } else if (upDIC.nModified === 1) {
           // return res.json({results: '解绑医生成功'})
-          req.body.doctorObjectId = itemDIC.doctorId
-          next()
+          // 更新alluser DIC字段
+          let queryP = {_id: patientObjectId}
+          let upObjP = {$unset: {doctorInCharge: 1}}
+          Alluser.updateOne(queryP, upObjP, function (err, upP) {
+            if (err) {
+              return res.status(500).send(err)
+            } else {
+              req.body.doctorObjectId = itemDIC.doctorId
+              next()
+            }
+          })
         }
       })
     }
@@ -531,6 +554,13 @@ exports.autoRelease = function () {
         } else {
           console.log(new Date() + ' --- 主管服务过期自动取消 --- ' + 'The DIC entry ' + item._id + ' has ERROR!')
         }
+      },
+      updateAlluser: function (callback) { // 更新alluser DIC字段
+        let queryP = {_id: item.patientId._id}
+        let upObjP = {$unset: {doctorInCharge: 1}}
+        Alluser.updateOne(queryP, upObjP, function (err, upP) {
+          callback(err)
+        })
       }
     }, function (err) {
       if (err) {

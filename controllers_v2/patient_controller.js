@@ -25,8 +25,8 @@ var docInfoForPat = {
   workUnit: 1,
   description: 1,
   major: 1,
-  photoUrl: 1, 
-  schedules: 1, 
+  photoUrl: 1,
+  schedules: 1,
   suspendTime: 1
 }
 // var config = require('../config')
@@ -39,6 +39,7 @@ var DpRelation = require('../models/dpRelation')
 var commonFunc = require('../middlewares/commonFunc')
 var Counsel = require('../models/counsel')
 var VitalSign = require('../models/vitalSign')
+var DoctorsInCharge = require('../models/doctorsInCharge')
 
 var patientCtrl = require('../controllers_v2/patient_controller')
 
@@ -63,6 +64,7 @@ exports.getPatientDetail = function (req, res) {
     // } else if (item.IDNo === undefined) {
     //   return res.json({results: '没有填写个人信息'})
     } else {
+      item.photoUrl = commonFunc.adaptPrefix(item.photoUrl)
       // 输出最新的诊断内容
       let recentDiagnosis = []
       if (item.diagnosisInfo.length !== 0) {
@@ -231,15 +233,19 @@ exports.getDoctorLists = function (req, res) {
   if (req.query.doctorId !== null && req.query.doctorId !== undefined && req.query.doctorId !== '') {
     query = {userId: req.query.doctorId, role: 'doctor', reviewStatus: 1}
     option = ''
-    fields = docInfoForPat
   }
-
+  if (req.session.role === 'admin' || req.session.role.indexOf('admin') !== -1) {
+    fields = {_id: 1, province: 1, city: 1, workUnit: 1, title: 1, department: 1}
+  }
   Alluser.getSome(query, function (err, items) {
     if (err) {
       return res.status(500).send(err.errmsg)
+    } else {
+      for (let i = items.length - 1; i >= 0; i--) {
+        items[i].photoUrl = commonFunc.adaptPrefix(items[i].photoUrl)
+      }
+      res.json({results: items, nexturl: nexturl})
     }
-
-    res.json({results: items, nexturl: nexturl})
   }, option, fields, populate)
 }
 
@@ -335,41 +341,13 @@ exports.getMyFavoriteDoctors = function (req, res) {
     if (item.doctors.length === 0) {
       return res.json({results: '未关注任何医生！'})
     }
-    res.json({results: item.doctors.slice(skip, limit + skip), nexturl: nexturl})
-  }, opts, fields, populate)
-}
-
-// 获取患者的所有医生 2017-03-30 GY
-// 2017-04-05 GY 修改：按照要求更换查询表
-exports.getMyDoctor = function (req, res) {
-  // 查询条件
-  // var patientObject = req.body.patientObject;
-  let _patientId = req.session.userId
-  let query = {userId: _patientId}
-
-  let opts = ''
-  let fields = {'_id': 0, 'doctorsInCharge': 1}
-  // 通过子表查询主表，定义主表查询路径及输出内容
-  let populate = {path: 'doctorsInCharge.doctorId', select: docInfoForPat}
-
-  Alluser.getOne(query, function (err, item) {
-    if (err) {
-      return res.status(500).send(err.errmsg)
-    }
-    // console.log(item.doctors.length)
-    let doctorsInChargeList = item.doctorsInCharge || []
-    let currentDocInCharge
-    for (let i = 0; i < doctorsInChargeList.length; i++) {
-      if (doctorsInChargeList[i].invalidFlag === 1) {
-        currentDocInCharge = doctorsInChargeList[i]
-        break
+    let doctors = item.doctors
+    for (let i = doctors.length - 1; i >= 0; i--) {
+      if (doctors[i].doctorId !== null) {
+        doctors[i].doctorId.photoUrl = commonFunc.adaptPrefix(doctors[i].doctorId.photoUrl)
       }
     }
-    if (currentDocInCharge === undefined) {
-      return res.json({results: '当前无主管医生'})
-    } else {
-      res.json({results: currentDocInCharge})
-    }
+    res.json({results: doctors.slice(skip, limit + skip), nexturl: nexturl})
   }, opts, fields, populate)
 }
 
@@ -388,6 +366,41 @@ exports.getCounselRecords = function (req, res) {
     if (err) {
       return res.status(500).send(err)
     }
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (items[i].doctorId !== null) {
+        items[i].doctorId.photoUrl = commonFunc.adaptPrefix(items[i].doctorId.photoUrl)
+      }
+    }
+    // if (items.length) {
+    //   for (let i = 0; i < items.length; i++) {
+    //     if (items[i].symptomPhotoUrl.constructor === Array) {
+    //       if (items[i].symptomPhotoUrl.length) {
+    //         for (let j = 0; j < items[i].symptomPhotoUrl.length; j++) {
+    //           if (typeof(items[i].symptomPhotoUrl[j]) === 'string') {
+    //             let re = items[i].symptomPhotoUrl[j].match(/\/uploads(\S*)(jpg|png|jpeg|gif|bmp|raw|webp)/)
+    //             // console.log(re)
+    //             if (re) {
+    //               items[i].symptomPhotoUrl[j] = 'https://' + webEntry.photo_domain + re[0]
+    //             }
+    //           }
+    //         }
+    //       }
+    //     }
+    //     if (items[i].diagnosisPhotoUrl.constructor === Array) {
+    //       if (items[i].diagnosisPhotoUrl.length) {
+    //         for (let j = 0; j < items[i].diagnosisPhotoUrl.length; j++) {
+    //           if (typeof(items[i].diagnosisPhotoUrl[j]) === 'string') {
+    //             let re = items[i].diagnosisPhotoUrl[j].match(/\/uploads(\S*)(jpg|png|jpeg|gif|bmp|raw|webp)/)
+    //             // console.log(re)
+    //             if (re) {
+    //               items[i].diagnosisPhotoUrl[j] = 'https://' + webEntry.photo_domain + re[0]
+    //             }
+    //           }
+    //         }
+    //       }
+    //     }
+    //   }
+    // }
     res.json({results: items})
   }, opts, fields, populate)
 }
@@ -584,7 +597,7 @@ exports.editPatientDetail = function (req, res, next) {
     upObj['name'] = req.body.name
   }
   if (req.body.photoUrl !== null && req.body.photoUrl !== '' && req.body.photoUrl !== undefined) {
-    upObj['photoUrl'] = req.body.photoUrl
+    upObj['photoUrl'] = commonFunc.removePrefix(req.body.photoUrl)
   }
   if (req.body.birthday !== null && req.body.birthday !== '' && req.body.birthday !== undefined) {
     upObj['birthday'] = new Date(req.body.birthday)
@@ -595,15 +608,15 @@ exports.editPatientDetail = function (req, res, next) {
   if (req.body.IDNo !== null && req.body.IDNo !== '' && req.body.IDNo !== undefined) {
     upObj['IDNo'] = req.body.IDNo
   }
-  if (req.body.height !== null && req.body.height !== '' && req.body.height !== undefined) {
-    upObj['height'] = req.body.height
-  } else {
+  if (req.body.height === '') {
     upObj['height'] = undefined
+  } else if (req.body.height !== null && req.body.height !== '' && req.body.height !== undefined) {
+    upObj['height'] = req.body.height
   }
-  if (req.body.weight !== null && req.body.weight !== '' && req.body.weight !== undefined) {
-    upObj['weight'] = req.body.weight
-  } else {
+  if (req.body.weight === '') {
     upObj['weight'] = undefined
+  } else if (req.body.weight !== null && req.body.weight !== '' && req.body.weight !== undefined) {
+    upObj['weight'] = req.body.weight
   }
   if (req.body.occupation !== null && req.body.occupation !== '' && req.body.occupation !== undefined) {
     upObj['occupation'] = req.body.occupation
@@ -626,10 +639,10 @@ exports.editPatientDetail = function (req, res, next) {
   if (req.body.class_info !== null && req.body.class_info !== '' && req.body.class_info !== undefined) {
     upObj['class_info'] = req.body.class_info
   }
-  if (req.body.operationTime !== null && req.body.operationTime !== '' && req.body.operationTime !== undefined) {
-    upObj['operationTime'] = new Date(req.body.operationTime)
-  } else {
+  if (req.body.operationTime === '') {
     upObj['operationTime'] = undefined
+  } else if (req.body.operationTime !== null && req.body.operationTime !== '' && req.body.operationTime !== undefined) {
+    upObj['operationTime'] = new Date(req.body.operationTime)
   }
   if (req.body.hypertension !== null && req.body.hypertension !== '' && req.body.hypertension !== undefined) {
     upObj['hypertension'] = req.body.hypertension
@@ -638,25 +651,21 @@ exports.editPatientDetail = function (req, res, next) {
     upObj['allergic'] = req.body.allergic
   }
   if (req.body.lastVisit !== null && req.body.lastVisit !== '' && req.body.lastVisit !== undefined) {
-    if (req.body.lastVisit.time !== null && req.body.lastVisit.time !== '' && req.body.lastVisit.time !== undefined) {
-      upObj['lastVisit.time'] = new Date(req.body.lastVisit.time)
-    } else {
+    if (req.body.lastVisit.time === '') {
       upObj['lastVisit.time'] = undefined
+    } else if (req.body.lastVisit.time !== null && req.body.lastVisit.time !== '' && req.body.lastVisit.time !== undefined) {
+      upObj['lastVisit.time'] = new Date(req.body.lastVisit.time)
     }
-    if (req.body.lastVisit.hospital !== null && req.body.lastVisit.hospital !== '' && req.body.lastVisit.hospital !== undefined) {
-      upObj['lastVisit.hospital'] = req.body.lastVisit.hospital
-    } else {
+    if (req.body.lastVisit.hospital === '') {
       upObj['lastVisit.hospital'] = undefined
+    } else if (req.body.lastVisit.hospital !== null && req.body.lastVisit.hospital !== '' && req.body.lastVisit.hospital !== undefined) {
+      upObj['lastVisit.hospital'] = req.body.lastVisit.hospital
     }
-    if (req.body.lastVisit.diagnosis !== null && req.body.lastVisit.diagnosis !== '' && req.body.lastVisit.diagnosis !== undefined) {
-      upObj['lastVisit.diagnosis'] = req.body.lastVisit.diagnosis
-    } else {
+    if (req.body.lastVisit.diagnosis === '') {
       upObj['lastVisit.diagnosis'] = undefined
+    } else if (req.body.lastVisit.diagnosis !== null && req.body.lastVisit.diagnosis !== '' && req.body.lastVisit.diagnosis !== undefined) {
+      upObj['lastVisit.diagnosis'] = req.body.lastVisit.diagnosis
     }
-  } else {
-    upObj['lastVisit.time'] = undefined
-    upObj['lastVisit.hospital'] = undefined
-    upObj['lastVisit.diagnosis'] = undefined
   }
 
   // return res.json({query: query, upObj: upObj});
@@ -667,6 +676,7 @@ exports.editPatientDetail = function (req, res, next) {
     if (upPatient == null) {
       return res.json({result: '修改失败，不存在的患者ID！'})
     }
+    upPatient.photoUrl = commonFunc.adaptPrefix(upPatient.photoUrl)
     let date = req.body.date || null   // 区别是通过vitalSign插入体重信息，还是通过修改个人信息插入体重信息
 
     let dataTime = req.body.datatime || null
@@ -1205,4 +1215,61 @@ exports.favoriteDoctorAsyncTest = function (req, res) {
       return res.json({msg: '关注成功', data: results, code: 0})
     }
   })
+}
+
+// 管理员获取患者主管关注医生 2017-10-20 GY
+exports.doctorsByPatient = function (req, res) {
+  let userId = req.query.userId || null
+  if (userId === null) {
+    return res.status(412).json({msg: 'userId_needed', code: 1})
+  }
+  let query = {userId: userId}
+  let opts = ''
+  let fields = {_id: 1, userId: 1, name:1, doctors: 1}
+  let populate = {path: 'doctors.doctorId', select: {userId: 1, name: 1}}
+  Alluser.getOne(query, function (err, item) {
+    if (err) {
+      return res.status(500).send(err)
+    } else if (item === null) {
+      return res.status(404).json({
+        msg: 'id_not_found', 
+        code: 1
+      })
+    } else {
+      let FD = []
+      for (let i = 0; i < item.doctors.length; i++) {
+        if (item.doctors[i].invalidFlag === 0) {
+          FD.push(item.doctors[i])
+        }
+      }
+      let patientId = item._id
+      let queryDIC = {patientId: patientId, invalidFlag: 1}
+      let optsDIC = ''
+      let fieldsDIC = {_id: 1, patientId: 1, doctorId: 1, invalidFlag: 1}
+      let populateDIC = {path: 'doctorId', select: {userId: 1, name: 1, phoneNo: 1}}
+      DoctorsInCharge.getOne(queryDIC, function (err, itemDIC) {
+        if (err) {
+          return res.status(500).send(err)
+        } else if (itemDIC === null) {
+          return res.json({
+            msg: 'success', 
+            code: 0, 
+            data: {
+              FD: FD, 
+              DIC: 'NULL'
+            }
+          })
+        } else {
+          return res.json({
+            msg: 'success', 
+            code: 0, 
+            data: {
+              FD: FD, 
+              DIC: itemDIC
+            }
+          })
+        }
+      }, optsDIC, fieldsDIC, populateDIC)
+    }
+  }, opts, fields, populate)
 }

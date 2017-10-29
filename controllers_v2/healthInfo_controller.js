@@ -2,6 +2,32 @@
 // var  config = require('../config')
 var Alluser = require('../models/alluser')
 var HealthInfo = require('../models/healthInfo')
+var webEntry = require('../settings').webEntry
+
+// 获得所有患者的所有健康信息 PC端 2017-10-22 lgf
+exports.getAllHealthInfos = function (req, res) {
+  let opts = ''
+  let skip = req.query.skip || null
+  let limit = req.query.limit || null
+  if (limit !== null && skip !== null) {
+    opts = {limit: Number(limit), skip: Number(skip), sort: '-_id'}
+  } else if (limit === null && skip === null) {
+    opts = {sort: '-_id'}
+  } else {
+    return res.json({msg: '请确认skip,limit的输入是否正确', code: 1})
+  }
+  HealthInfo.countSome('', function (err, healthinfoCount) {
+    if (err) {
+      return res.status(500).send(err)
+    }
+    HealthInfo.getSome('', function (err, items) {
+      if (err) {
+        return res.status(500).send(err)
+      }
+      return res.json({code: 0, msg: 'success', data: {count: healthinfoCount, healthInfoList: items}})
+    }, opts)
+  })
+}
 
 // 获得患者所有的健康信息 修改为医生端和患者端共用 2017-08-09 lgf
 exports.getAllHealthInfo = function (req, res) {
@@ -44,7 +70,17 @@ exports.getAllHealthInfo = function (req, res) {
       let url = []
       for (let j = 0; j < healthInfolist[i].url.length; j++) {
         if (healthInfolist[i].url[j].photo !== '') {
-          url.push(healthInfolist[i].url[j].photo)
+          // photo_url 拼接 GY 2017-10-27
+          let photourl = healthInfolist[i].url[j].photo
+          if (typeof(photourl) === 'string') {
+            let re = photourl.match(/\/uploads(\S*)(jpg|png|jpeg|gif|bmp|raw|webp)/)
+            if (re) {
+              photourl = 'https://' + webEntry.photo_domain + re[0]
+            }
+          }
+
+          url.push(photourl)
+          // url.push(healthInfolist[i].url[j].photo)
         }
       }
       let healthInfoTmp = {time, insertTime, type, label, userId, description, comments, url}
@@ -94,7 +130,16 @@ exports.getHealthDetail = function (req, res) {
     let url = []
     for (let i = 0; i < item.url.length; i++) {
       if (item.url[i].photo !== '') {
-        url.push(item.url[i].photo)
+        // photo_url 拼接 GY 2017-10-27
+        let photourl = item.url[i].photo
+        if (typeof(photourl) === 'string') {
+          let re = photourl.match(/\/uploads(\S*)(jpg|png|jpeg|gif|bmp|raw|webp)/)
+          if (re) {
+            photourl = 'https://' + webEntry.photo_domain + re[0]
+          }
+        }
+
+        url.push(photourl)
       }
     }
     // console.log('item', item)
@@ -195,7 +240,15 @@ exports.insertHealthInfo = function (req, res) {
       for (let i = 0; i < req.body.url.length; i++) {
         let urlObjTmp = {}
         // console.log(req.body.url[i].photo)
-        urlObjTmp['photo'] = req.body.url[i]
+        // photo_url 拆分 GY 2017-10-27
+        let photourl = req.body.url[i]
+        if (typeof(photourl) === 'string') {
+          let re = photourl.match(/\/uploads(\S*)(jpg|png|jpeg|gif|bmp|raw|webp)/)
+          if (re) {
+            urlObjTmp['photo'] = re[0]
+          }
+        }
+        // urlObjTmp['photo'] = req.body.url[i]
         // console.log(urlObj[i].photo)
         urlObjTmp['photoId'] = healthInfoData.userId + insertTimestr + add0(i)
         urlObj.push(urlObjTmp)
@@ -301,7 +354,17 @@ exports.modifyHealthDetail = function (req, res) {
       }
       for (let i = 0; i < req.body.url.length; i++) {
         let urlObjTmp = {}
-        urlObjTmp['photo'] = req.body.url[i]
+
+        // photo_url 拆分 GY 2017-10-27
+        let photourl = req.body.url[i]
+        if (typeof(photourl) === 'string') {
+          let re = photourl.match(/\/uploads(\S*)(jpg|png|jpeg|gif|bmp|raw|webp)/)
+          if (re) {
+            urlObjTmp['photo'] = re[0]
+          }
+        }
+        // urlObjTmp['photo'] = req.body.url[i]
+        
         urlObjTmp['photoId'] = req.session.userId + insertTimestr + add0(i)  // 需要确认是谁进行健康信息的修改
         urlObj.push(urlObjTmp)
       }

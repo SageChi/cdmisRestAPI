@@ -1,6 +1,6 @@
 // 注释 2017-07-14 YQC
 
-// var config = require('../config')
+var config = require('../config')
 var webEntry = require('../settings').webEntry
 var Communication = require('../models/communication')
 var Counsel = require('../models/counsel')
@@ -11,9 +11,10 @@ var Consultation = require('../models/consultation')
 var DpRelation = require('../models/dpRelation')
 var News = require('../models/news')
 var Message = require('../models/message')
-// var commonFunc = require('../middlewares/commonFunc')
+var commonFunc = require('../middlewares/commonFunc')
 var request = require('request')
 var Alluser = require('../models/alluser')
+// var commonFunc = require('../middlewares/commonFunc')
 
 // 根据counselId获取counsel表除messages外的信息 2017-03-31 GY
 // 注释 输入，counselId；输出，问诊信息
@@ -34,6 +35,32 @@ exports.getCounselReport = function (req, res) {
     if (err) {
       return res.status(500).send(err.errmsg)
     }
+    if (item.symptomPhotoUrl.constructor === Array) {
+      if (item.symptomPhotoUrl.length) {
+        for (let j = 0; j < item.symptomPhotoUrl.length; j++) {
+          if (typeof(item.symptomPhotoUrl[j]) === 'string') {
+            let re = item.symptomPhotoUrl[j].match(/\/uploads(\S*)(jpg|png|jpeg|gif|bmp|raw|webp)/)
+            // console.log(re)
+            if (re) {
+              item.symptomPhotoUrl[j] = 'https://' + webEntry.photo_domain + re[0]
+            }
+          }
+        }
+      }
+    }
+    if (item.diagnosisPhotoUrl.constructor === Array) {
+      if (item.diagnosisPhotoUrl.length) {
+        for (let j = 0; j < item.diagnosisPhotoUrl.length; j++) {
+          if (typeof(item.diagnosisPhotoUrl[j]) === 'string') {
+            let re = item.diagnosisPhotoUrl[j].match(/\/uploads(\S*)(jpg|png|jpeg|gif|bmp|raw|webp)/)
+            // console.log(re)
+            if (re) {
+              item.diagnosisPhotoUrl[j] = 'https://' + webEntry.photo_domain + re[0]
+            }
+          }
+        }
+      }
+    }
     res.json({results: item})
   }, opts, fields, populate)
 }
@@ -51,14 +78,20 @@ exports.getTeam = function (req, res) {
   // 设置参数
   var opts = ''
   var fields = {'_id': 0, 'revisionInfo': 0}
-  var populate = ''
 
   Team.getOne(query, function (err, item) {
     if (err) {
       return res.status(500).send(err.errmsg)
     }
+    if (item !== null) {
+      item.sponsorPhoto = commonFunc.adaptPrefix(item.sponsorPhoto)
+      item.photoAddress = commonFunc.adaptPrefix(item.photoAddress)
+      for (var i = item.members.length - 1; i >= 0; i--) {
+        item.members[i].photoUrl = commonFunc.adaptPrefix(item.members[i].photoUrl)
+      }
+    }
     res.json({results: item})
-  }, opts, fields, populate)
+  }, opts, fields)
 }
 
 // 新建组 2017-04-06 GY
@@ -70,8 +103,8 @@ exports.newTeam = function (req, res) {
     name: req.body.name,
     sponsorId: req.body.sponsorId,
     sponsorName: req.body.sponsorName,
-    sponsorPhoto: req.body.sponsorPhoto,
-    photoAddress: req.body.photoAddress,
+    sponsorPhoto: commonFunc.removePrefix(req.body.sponsorPhoto),
+    photoAddress: commonFunc.removePrefix(req.body.photoAddress),
     // members: [
     //  {
     //    userId: String,
@@ -100,8 +133,11 @@ exports.newTeam = function (req, res) {
   newTeam.save(function (err, teamInfo) {
     if (err) {
       return res.status(500).send(err.errmsg)
+    } else {
+      teamInfo.sponsorPhoto = commonFunc.adaptPrefix(teamInfo.sponsorPhoto)
+      teamInfo.photoAddress = commonFunc.adaptPrefix(teamInfo.photoAddress)
+      res.json({result: '新建成功', newResults: teamInfo})
     }
-    res.json({result: '新建成功', newResults: teamInfo})
   })
 }
 
@@ -153,6 +189,32 @@ exports.checkCounsel = function (req, res, next) {
     }
     if (counsel == null) {
       return res.json({result: '不存在的counselID！'})
+    }
+    if (counsel.symptomPhotoUrl.constructor === Array) {
+      if (counsel.symptomPhotoUrl.length) {
+        for (let j = 0; j < counsel.symptomPhotoUrl.length; j++) {
+          if (typeof(counsel.symptomPhotoUrl[j]) === 'string') {
+            let re = counsel.symptomPhotoUrl[j].match(/\/uploads(\S*)(jpg|png|jpeg|gif|bmp|raw|webp)/)
+            // console.log(re)
+            if (re) {
+              counsel.symptomPhotoUrl[j] = 'https://' + webEntry.photo_domain + re[0]
+            }
+          }
+        }
+      }
+    }
+    if (counsel.diagnosisPhotoUrl.constructor === Array) {
+      if (counsel.diagnosisPhotoUrl.length) {
+        for (let j = 0; j < counsel.diagnosisPhotoUrl.length; j++) {
+          if (typeof(counsel.diagnosisPhotoUrl[j]) === 'string') {
+            let re = counsel.diagnosisPhotoUrl[j].match(/\/uploads(\S*)(jpg|png|jpeg|gif|bmp|raw|webp)/)
+            // console.log(re)
+            if (re) {
+              counsel.diagnosisPhotoUrl[j] = 'https://' + webEntry.photo_domain + re[0]
+            }
+          }
+        }
+      }
     }
     req.body.diseaseInfo = counsel
     next()
@@ -268,10 +330,17 @@ exports.getConsultation = function (req, res) {
     if (err) {
       return res.status(422).send(err.message)
     }
-    if (item == null) {
+    if (item === null) {
       return res.json({result: '不存在的consultationId!'})
+    } else {
+      if (item.patientId !== null) {
+        item.patientId.photoUrl = commonFunc.adaptPrefix(item.patientId.photoUrl)
+      }
+      if (item.sponsorId !== null) {
+        item.sponsorId.photoUrl = commonFunc.adaptPrefix(item.sponsorId.photoUrl)
+      }
+      res.json({result: item})
     }
-    res.json({result: item})
   }, fields, opts, populate)
 }
 
@@ -321,11 +390,15 @@ exports.insertMember = function (req, res, next) {
   var query = {
     teamId: req.body.teamId
   }
+  let members = req.body.members || []
+  for (var i = members.length - 1; i >= 0; i--) {
+    members[i].photoUrl = commonFunc.removePrefix(members[i].photoUrl)
+  }
 
   var upObj = {
     $addToSet: {
       members: {
-        $each: req.body.members
+        $each: members
       }
     }
   }
@@ -366,6 +439,10 @@ exports.updateNumber = function (req, res) {
       if (err) {
         return res.status(422).send(err.message)
       } else {
+        upteam.members = upteam.members || []
+        for (var i = upteam.members.length - 1; i >= 0; i--) {
+          upteam.members[i].photoUrl = commonFunc.adaptPrefix(upteam.members[i].photoUrl)
+        }
         return res.json({result: '更新成员成功', results: upteam})
       }
     }, {new: true})
@@ -671,6 +748,105 @@ exports.postCommunication = function (req, res) {
 
       // res.json({result:'新建成功', newResults: communicationInfo});
   })
+  // 微信模板消息
+  if (req.body.newsType === '11') {
+    if (commmunicationData.receiverRole === 'doctor') {
+      let counselId = ''
+      if (req.body.content.contentType === 'custom') {
+        counselId = commmunicationData.content.content.counselId
+      }
+      var templateDoc = {
+        'userId': req.body.content.targetID,
+        'role': 'doctor',
+        'postdata': {
+          'template_id': config.wxTemplateIdConfig.newCounselToDocOrTeam,
+          'url': '',                                  // 跳转路径需要添加
+          'data': {
+            'first': {
+              'value': '您的患者有新的提问，请及时处理',
+              'color': '#173177'
+            },
+            'keyword1': {
+              'value': counselId,                     // 咨询ID,custom以外的聊天记录貌似获取不到。。
+              'color': '#173177'
+            },
+            'keyword2': {
+              'value': req.body.content.fromName,     // 患者信息（姓名，性别，年龄）
+              'color': '#173177'
+            },
+            'keyword3': {
+              'value': req.body.content.content.text, // 问题描述
+              'color': '#173177'
+            },
+            'keyword4': {
+              'value': commonFunc.getNowFormatSecondMinus(new Date(req.body.content.sendDateTime)), // 提交时间
+              'color': '#173177'
+            },
+
+            'remark': {
+              'value': '感谢您的使用！',
+              'color': '#173177'
+            }
+          }
+        }
+      }
+      request({
+        url: 'http://' + webEntry.domain + '/api/v2/wechat/messageTemplate',
+        method: 'POST',
+        body: templateDoc,
+        json: true
+      }, function (err, response) {
+        if (err) {
+          console.log(new Date(), 'auto_send_messageTemplate_fail_' + commmunicationData.messageNo)
+        }
+      })
+    } else if (commmunicationData.receiverRole === 'patient') {
+      if (req.body.content.contentType === 'text') {
+        let help = ''
+        var templatePat = {
+          'userId': req.body.content.targetID,
+          'role': 'patient',
+          'postdata': {
+            'template_id': config.wxTemplateIdConfig.docReply,
+            'url': '',
+            'data': {
+              'first': {
+                'value': '您的咨询已被回复，请点击此处查看详情。',
+                'color': '#173177'
+              },
+              'keyword1': {
+                'value': help,                          // 咨询内容,貌似获取不到。。
+                'color': '#173177'
+              },
+              'keyword2': {
+                'value': req.body.content.content.text, // 回复内容
+                'color': '#173177'
+              },
+              'keyword3': {
+                'value': req.body.content.fromName,     // 医生姓名
+                'color': '#173177'
+              },
+
+              'remark': {
+                'value': '感谢您的使用！',
+                'color': '#173177'
+              }
+            }
+          }
+        }
+        request({
+          url: 'http://' + webEntry.domain + '/api/v2/wechat/messageTemplate',
+          method: 'POST',
+          body: templatePat,
+          json: true
+        }, function (err, response) {
+          if (err) {
+            console.log(new Date(), 'auto_send_messageTemplate_fail_' + commmunicationData.messageNo)
+          }
+        })
+      }
+    }
+  }
 }
 
 // exports.postCommunication = function(req, res) {
